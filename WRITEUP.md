@@ -19,9 +19,9 @@ client ──HTTP──▶  Modal proxy / load balancer  ──▶  [ vLLM conta
   server (`vllm serve Qwen/Qwen3-0.6B`) as a subprocess inside `@modal.enter()`,
   exposed via [`@modal.web_server(port=8000)`](https://modal.com/docs/guide/webhooks#web-server).
   vLLM natively serves `/v1/chat/completions`, so the Modal URL *is* the OpenAI
-  base URL — no custom API layer needed. `--enforce-eager` skips vLLM's graph
-  compilation step, cutting cold-start time significantly (per the
-  [vLLM CPU installation guide](https://docs.vllm.ai/en/latest/getting_started/installation/cpu.html)).
+  base URL — no custom API layer needed. `--enforce-eager` skips vLLM's CUDA
+  graph compilation step, cutting cold-start time significantly (see
+  [vLLM engine arguments](https://docs.vllm.ai/en/latest/serving/engine_args.html)).
 - **Routing to model servers** is handled by Modal's built-in proxy/load
   balancer. I deliberately did not hand-roll a router: Modal already
   distributes requests across healthy containers and tracks per-container load.
