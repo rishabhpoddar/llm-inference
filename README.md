@@ -53,7 +53,7 @@ is the OpenAI base; the endpoint is `<url>/v1/chat/completions`.
 Smoke test:
 
 ```bash
-curl https://agentreach796--qwen3-cpu-inference-vllmserver-serve.modal.run/v1/chat/completions \
+curl https://<workspace>--qwen3-cpu-inference-vllmserver-serve.modal.run/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{"model":"Qwen3-0.6B","messages":[{"role":"user","content":"hello"}]}'
 ```
@@ -73,7 +73,7 @@ ramp -> sustain @ 40 -> drop-to-0 profile, so no `-u/-r` needed):
 
 ```bash
 locust -f loadtest/locustfile.py \
-  --host https://agentreach796--qwen3-cpu-inference-vllmserver-serve.modal.run \
+  --host https://<workspace>--qwen3-cpu-inference-vllmserver-serve.modal.run \
   --headless --csv results/locust --csv-full-history
 ```
 
