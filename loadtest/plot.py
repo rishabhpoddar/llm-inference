@@ -28,21 +28,30 @@ RESULTS_DIR = os.path.join(os.path.dirname(__file__), "..", "results")
 # Graph 1: container count vs. traffic
 # --------------------------------------------------------------------------- #
 def _load_locust_user_count():
-    """Return (unix_ts_list, user_count_list) — raw Unix timestamps, not normalized."""
+    """Return (unix_ts_list, user_count_list, first_user_ts).
+
+    first_user_ts is the Unix timestamp when Locust spawned its first user —
+    used as the common t=0 so the containers line doesn't appear to lead traffic.
+    """
     path = os.path.join(RESULTS_DIR, "locust_stats_history.csv")
     if not os.path.exists(path):
-        return None, None
+        return None, None, None
     ts_list, users_list = [], []
+    first_user_ts = None
     with open(path) as f:
         for row in csv.DictReader(f):
             if row.get("Name") != "Aggregated":
                 continue
             try:
-                ts_list.append(float(row["Timestamp"]))
-                users_list.append(int(row["User Count"]))
+                ts = float(row["Timestamp"])
+                users = int(row["User Count"])
             except (KeyError, ValueError):
                 continue
-    return ts_list, users_list
+            if first_user_ts is None and users > 0:
+                first_user_ts = ts
+            ts_list.append(ts)
+            users_list.append(users)
+    return ts_list, users_list, first_user_ts
 
 
 def plot_containers_vs_traffic():
@@ -58,14 +67,17 @@ def plot_containers_vs_traffic():
             stats_unix.append(float(ts) if ts else None)
             runners.append(float(row["runners"]))
 
-    user_unix, user_count = _load_locust_user_count()
+    user_unix, user_count, first_user_ts = _load_locust_user_count()
 
-    # Align both series on Unix time -> common t=0.
-    all_unix = [ts for ts in stats_unix if ts is not None] + (user_unix or [])
-    t0 = min(all_unix) if all_unix else 0
+    # Align both series so t=0 is when Locust spawned its first user.
+    # This prevents poll_stats (which starts before Locust) making the
+    # containers line appear to lead traffic.
+    t0 = first_user_ts if first_user_ts else (
+        min(ts for ts in stats_unix if ts is not None) if stats_unix else 0
+    )
 
     if any(ts is not None for ts in stats_unix):
-        t = [((ts or 0) - t0) for ts in stats_unix]
+        t = [(ts - t0) for ts in stats_unix]
     else:
         # Fallback: stats.csv has no ts_unix column (old run), use relative t.
         with open(stats_path) as f:
