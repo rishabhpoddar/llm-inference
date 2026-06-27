@@ -21,7 +21,7 @@ client ──HTTP──▶  Modal proxy / load balancer  ──▶  [ vLLM conta
   vLLM natively serves `/v1/chat/completions`, so the Modal URL *is* the OpenAI
   base URL — no custom API layer needed. `--enforce-eager` skips vLLM's CUDA
   graph compilation step, cutting cold-start time significantly (see
-  [vLLM engine arguments](https://docs.vllm.ai/en/latest/serving/engine_args.html)).
+  [vLLM engine arguments](https://docs.vllm.ai/en/latest/configuration/engine_args/)).
 - **Routing to model servers** is handled by Modal's built-in proxy/load
   balancer. I deliberately did not hand-roll a router: Modal already
   distributes requests across healthy containers and tracks per-container load.
