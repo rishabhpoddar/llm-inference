@@ -114,42 +114,76 @@ def plot_containers_vs_traffic():
 # Graph 2: latency (TTFT + p99)
 # --------------------------------------------------------------------------- #
 def _load_locust_history():
-    """Return {name: {"t":[], "p50":[], "p99":[]}} from Locust history CSV (ms)."""
+    """Return ({name: {"t":[], "p50":[], "p99":[]}}, rps_t, rps_vals).
+
+    Latency series use the first_user_ts as t=0 (same reference as graph 1).
+    RPS comes from the Aggregated rows.
+    """
     path = os.path.join(RESULTS_DIR, "locust_stats_history.csv")
     if not os.path.exists(path):
         print(f"skip graph 2: {path} not found (run locust with --csv)")
-        return None
-    series = {}
+        return None, None, None
+
+    # Use first non-zero user timestamp as t=0 (consistent with graph 1).
     t0 = None
+    rps_ts, rps_vals = [], []
+    series = {}
+
     with open(path) as f:
         for row in csv.DictReader(f):
             name = row.get("Name", "")
-            if name not in ("TTFT", "E2E"):
-                continue
             try:
                 ts = float(row["Timestamp"])
-                p50 = float(row["50%"])
-                p99 = float(row["99%"])
             except (KeyError, ValueError):
                 continue
-            t0 = ts if t0 is None else min(t0, ts)
-            s = series.setdefault(name, {"ts": [], "p50": [], "p99": []})
-            s["ts"].append(ts)
-            s["p50"].append(p50)
-            s["p99"].append(p99)
+
+            # Find t0: first moment a user existed.
+            if t0 is None and name == "Aggregated":
+                try:
+                    if int(row["User Count"]) > 0:
+                        t0 = ts
+                except (KeyError, ValueError):
+                    pass
+
+            # User count from Aggregated rows.
+            if name == "Aggregated":
+                try:
+                    rps_ts.append(ts)
+                    rps_vals.append(int(row["User Count"]))
+                except (KeyError, ValueError):
+                    pass
+
+            # Latency from TTFT / E2E rows.
+            if name in ("TTFT", "E2E"):
+                try:
+                    p50 = float(row["50%"])
+                    p99 = float(row["99%"])
+                except (KeyError, ValueError):
+                    continue
+                s = series.setdefault(name, {"ts": [], "p50": [], "p99": []})
+                s["ts"].append(ts)
+                s["p50"].append(p50)
+                s["p99"].append(p99)
+
     if not series:
         print("skip graph 2: no TTFT/E2E rows in Locust history")
-        return None
-    # normalize timestamps to relative seconds, ms -> s
+        return None, None, None
+
+    if t0 is None:
+        t0 = min(s["ts"][0] for s in series.values())
+
+    # Normalize: timestamps -> relative seconds, latency ms -> s.
     for s in series.values():
         s["t"] = [ts - t0 for ts in s["ts"]]
         s["p50"] = [v / 1000.0 for v in s["p50"]]
         s["p99"] = [v / 1000.0 for v in s["p99"]]
-    return series
+
+    rps_t = [ts - t0 for ts in rps_ts]
+    return series, rps_t, rps_vals
 
 
 def plot_latency():
-    series = _load_locust_history()
+    series, rps_t, rps_vals = _load_locust_history()
     if not series:
         return
     fig, ax = plt.subplots(figsize=(10, 5))
@@ -164,7 +198,19 @@ def plot_latency():
     ax.set_xlabel("time (s)")
     ax.set_ylabel("latency (s)")
     ax.set_ylim(bottom=0)
-    ax.legend(loc="upper right")
+
+    if rps_t:
+        ax2 = ax.twinx()
+        ax2.step(rps_t, rps_vals, where="post", color="tab:orange",
+                 linewidth=1.5, alpha=0.8, label="concurrent users (Locust)")
+        ax2.set_ylabel("concurrent users", color="tab:orange")
+        ax2.tick_params(axis="y", labelcolor="tab:orange")
+        ax2.set_ylim(bottom=0)
+        lines = ax.get_lines() + ax2.get_lines()
+        ax.legend(lines, [ln.get_label() for ln in lines], loc="upper right")
+    else:
+        ax.legend(loc="upper right")
+
     plt.title("Latency under load: TTFT (p50/p99) and E2E p99")
     fig.tight_layout()
     out = os.path.join(RESULTS_DIR, "latency.png")
