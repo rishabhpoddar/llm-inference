@@ -1,0 +1,5 @@
+# Local tooling for deploying and load-testing the Modal endpoint.
+# (vLLM itself runs inside the Modal container image, not here.)
+modal>=0.64
+locust>=2.20
+matplotlib>=3.7

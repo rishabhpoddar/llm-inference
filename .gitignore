@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Load-test artifacts are regenerated per run; keep the two final PNGs if you
+# want them in the writeup, but ignore the raw CSVs by default.
+results/*.csv
