@@ -1,0 +1,55 @@
+- [ ] use vllm base image
+- [ ] kubernetes deployment on modal for autoscaling
+    - [ ] see how to set up kubernetes on modal
+    - [ ] autoscaling signals:
+        - [ ] traffic
+        - [ ] resource usage (CPU, memory, GPU usage)
+        - [ ] configure:
+            - [ ] min replicas
+            - [ ] max replicas
+            - [ ] autoscaling window
+            - [ ] scale down delay
+            - [ ] concurrency target
+- [ ] vllm uses continuous batching (token level queuing).
+    - increasing batch size -> more throughput, but each user request will take longer to process
+    - [ ] test performance for multiple batch sizes.
+        - controlled via concurrency target on cluster level, and per pod via batch_size.
+- [ ] cold start problem
+    - GPU procurement + image loading + model weight loading + engine startup
+        - engineers can control image loading and model weight loading
+            - [ ] use only necessary dependencies
+            - [ ] try quantized version of model for smaller size
+            - [ ] for very large models, store weights not in the container image, but in a node thats physically in the same datacenter as the cluster -> most of the docker image size is from the weights.
+- routing and load balancing
+    - not just about round robin, need to take into account the number of tokens in the request + KV cache. See orchestrator like NVIDIA Dynamo.
+    - during scaling up, the system needs to hold up new requests until the new nodes are ready.
+        - queue is a standard solution for this.
+        - if this is good enough, you can even implement scale to zero depending on your application needs.
+    - for a global deployment, you need geo aware routing. It takes ~5MS for requests to travel across one timezone.
+- handling gpu failures:
+    - active-active -> multi region or cluster and all are serving traffic and request is routed
+    - active-passive -> one region / cluster is serving traffic and request is routed to the other region / cluster if the primary region is down.
+- security and compliance:
+    - user data logging
+    - model weights
+- zero downtime deployment:
+    - blue/green deployment -> deploy new version and route traffic to the new version. BUT this may not be good cause it means you need 2x the GPUs.
+    - instead, do canary deployment -> deploy new version and route a small percentage of traffic to the new version.
+- cost estimation:
+    - for APIs -> input token cost (Across all requests) + output token cost (across all requests) -> this is on the higher end cause there will also be input cache hits.
+    - for dedicated -> total gpu hours*price per gpu hour
+- observability:
+    - total volume of requests
+    - request and response size
+    - response codes (2xx, 4xx etc)
+    - latency:
+        - ttft
+        - tokens per second
+        - e2e latency on p50, p90, p99
+    - replica count
+    - utilization
+    - queue depth (number of requests waiting to be processed in the queue)
+- streaming data back to client:
+    - streaming text over http which makes it feel instant.
+    - websockets
+    - grpc
