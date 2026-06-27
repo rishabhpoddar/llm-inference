@@ -1,16 +1,16 @@
 """
-Poll the deployed Modal Function's autoscaler stats and log them to CSV.
+Poll the deployed Modal app's autoscaler stats and log them to CSV.
 
 Records, every few seconds:
   - container count (runners)
   - in-flight traffic seen by Modal (running inputs + backlog)
 
-Run this in parallel with load_test.py for the whole duration:
-  python loadtest/poll_stats.py --duration 600
+Run this in parallel with the Locust load test for the whole duration:
+  python loadtest/poll_stats.py --duration 540
 
 Then plot.py turns stats.csv into the "container count vs. traffic" graph.
 
-Note: the Function must be DEPLOYED (`modal deploy app.py`), not just `modal serve`.
+Note: the app must be DEPLOYED (`modal deploy app.py`), not just `modal serve`.
 """
 
 import argparse

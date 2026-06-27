@@ -2,12 +2,13 @@
 Generate the two required graphs from a load-test run.
 
   Graph 1 (containers_vs_traffic.png):
-      container count vs. in-flight traffic over time, from results/stats.csv
-      (produced by poll_stats.py).
+      container count (from results/stats.csv, produced by poll_stats.py) vs.
+      concurrent users (from Locust's full-history CSV) over time.
 
   Graph 2 (latency.png):
-      TTFT (p50/p99) and E2E (p99) over time, from Locust's full-history CSV
-      (results/locust_stats_history.csv). Latencies in that file are in ms.
+      TTFT (p50/p99) and E2E (p99) over time, with concurrent users overlaid,
+      from Locust's full-history CSV (results/locust_stats_history.csv).
+      Latencies in that file are in ms.
 
 Usage:
   python loadtest/plot.py
@@ -114,10 +115,10 @@ def plot_containers_vs_traffic():
 # Graph 2: latency (TTFT + p99)
 # --------------------------------------------------------------------------- #
 def _load_locust_history():
-    """Return ({name: {"t":[], "p50":[], "p99":[]}}, rps_t, rps_vals).
+    """Return ({name: {"t":[], "p50":[], "p99":[]}}, users_t, users_vals).
 
-    Latency series use the first_user_ts as t=0 (same reference as graph 1).
-    RPS comes from the Aggregated rows.
+    Latency series and the concurrent-user series share t=0 = first_user_ts
+    (same reference as graph 1). User counts come from the Aggregated rows.
     """
     path = os.path.join(RESULTS_DIR, "locust_stats_history.csv")
     if not os.path.exists(path):
@@ -126,7 +127,7 @@ def _load_locust_history():
 
     # Use first non-zero user timestamp as t=0 (consistent with graph 1).
     t0 = None
-    rps_ts, rps_vals = [], []
+    users_ts, users_vals = [], []
     series = {}
 
     with open(path) as f:
@@ -137,21 +138,15 @@ def _load_locust_history():
             except (KeyError, ValueError):
                 continue
 
-            # Find t0: first moment a user existed.
-            if t0 is None and name == "Aggregated":
-                try:
-                    if int(row["User Count"]) > 0:
-                        t0 = ts
-                except (KeyError, ValueError):
-                    pass
-
-            # User count from Aggregated rows.
             if name == "Aggregated":
                 try:
-                    rps_ts.append(ts)
-                    rps_vals.append(int(row["User Count"]))
+                    users = int(row["User Count"])
                 except (KeyError, ValueError):
-                    pass
+                    continue
+                if t0 is None and users > 0:  # first moment a user existed
+                    t0 = ts
+                users_ts.append(ts)
+                users_vals.append(users)
 
             # Latency from TTFT / E2E rows.
             if name in ("TTFT", "E2E"):
@@ -178,12 +173,12 @@ def _load_locust_history():
         s["p50"] = [v / 1000.0 for v in s["p50"]]
         s["p99"] = [v / 1000.0 for v in s["p99"]]
 
-    rps_t = [ts - t0 for ts in rps_ts]
-    return series, rps_t, rps_vals
+    users_t = [ts - t0 for ts in users_ts]
+    return series, users_t, users_vals
 
 
 def plot_latency():
-    series, rps_t, rps_vals = _load_locust_history()
+    series, users_t, users_vals = _load_locust_history()
     if not series:
         return
     fig, ax = plt.subplots(figsize=(10, 5))
@@ -199,9 +194,9 @@ def plot_latency():
     ax.set_ylabel("latency (s)")
     ax.set_ylim(bottom=0)
 
-    if rps_t:
+    if users_t:
         ax2 = ax.twinx()
-        ax2.step(rps_t, rps_vals, where="post", color="tab:orange",
+        ax2.step(users_t, users_vals, where="post", color="tab:orange",
                  linewidth=1.5, alpha=0.8, label="concurrent users (Locust)")
         ax2.set_ylabel("concurrent users", color="tab:orange")
         ax2.tick_params(axis="y", labelcolor="tab:orange")

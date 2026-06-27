@@ -2,8 +2,8 @@
 
 An OpenAI-compatible `/v1/chat/completions` API backed by **Qwen3-0.6B**, served
 on **CPU** with **vLLM**, running on **Modal**. Modal autoscales the number of
-containers with traffic (including scale-to-zero during lulls) and load-balances
-requests across them.
+containers with traffic (down to a warm minimum of 1 during lulls) and
+load-balances requests across them.
 
 ```
 app.py                  Modal app: image, weight prefetch, autoscaling vLLM server
@@ -47,8 +47,8 @@ modal deploy app.py
 ```
 
 This prints the public URL, e.g.
-`https://<workspace>--qwen3-cpu-inference-serve.modal.run`. That URL is the
-OpenAI base; the endpoint is `<url>/v1/chat/completions`.
+`https://<workspace>--qwen3-cpu-inference-vllmserver-serve.modal.run`. That URL
+is the OpenAI base; the endpoint is `<url>/v1/chat/completions`.
 
 Smoke test:
 
@@ -69,7 +69,7 @@ python loadtest/poll_stats.py --duration 540
 ```
 
 In another terminal, run Locust headless (the `LoadTestShape` drives the
-ramp -> sustain @ 40 -> scale-to-zero profile, so no `-u/-r` needed):
+ramp -> sustain @ 40 -> drop-to-0 profile, so no `-u/-r` needed):
 
 ```bash
 locust -f loadtest/locustfile.py \
@@ -94,5 +94,5 @@ Autoscaling/throughput knobs live in `app.py`:
 
 - `@modal.concurrent(max_inputs, target_inputs)` — concurrent requests per
   container; the autoscaler targets `target_inputs` and bursts to `max_inputs`.
-- `min_containers` / `max_containers` / `scaledown_window` on `@app.function`.
+- `min_containers` / `max_containers` / `scaledown_window` on `@app.cls`.
 - `cpu` / `memory` — more cores speed up decode for this small model.

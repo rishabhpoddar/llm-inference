@@ -1,7 +1,7 @@
 """
 OpenAI-compatible inference API for Qwen3-0.6B on CPU, served on Modal.
 
-Architecture (mirrors Modal's official vLLM snapshot examples, swapped GPU -> CPU):
+Architecture (mirrors Modal's official vLLM example, swapped GPU -> CPU):
 
   - A Modal class runs vLLM's OpenAI-compatible server (`vllm serve`) as a
     subprocess, exposed over HTTP via `@modal.web_server`. vLLM natively serves
@@ -12,21 +12,16 @@ Architecture (mirrors Modal's official vLLM snapshot examples, swapped GPU -> CP
   - `@modal.concurrent` lets one container serve many requests at once via vLLM
     continuous batching; the autoscaler adds containers when `target_inputs`
     per container is exceeded, up to `max_containers`.
-  - `min_containers=0` + `scaledown_window` => scale-to-zero during lulls.
+  - `min_containers=1` keeps one container warm so the first request never pays
+    a cold start; `scaledown_window` retires excess containers during lulls.
 
-Cold-start optimization -- Modal memory snapshots:
-  Without snapshots, a scale-from-zero cold start pays the full vLLM init every
-  time (image already cached, but model load + engine init/compile ~minutes).
-  With `enable_memory_snapshot=True`, the heavy init runs once inside
-  `@modal.enter(snap=True)` (launch vLLM, wait healthy, warm it up). Modal then
-  snapshots the whole container's memory -- including the vLLM subprocess with
-  its loaded weights and compiled artifacts. Subsequent cold starts *restore*
-  that memory image in seconds instead of re-initializing, so we keep
-  scale-to-zero without paying minutes on every wakeup.
-
-  (We do NOT use vLLM sleep mode or the GPU-snapshot option here: those exist to
-  evict weights from *GPU* memory before snapshotting. On CPU the weights live
-  in RAM and we want them captured directly in the CPU snapshot.)
+Cold starts:
+  A fresh vLLM-on-CPU container takes ~1-2 min to become ready (image pull +
+  model load from the Volume + engine init). `--enforce-eager` skips vLLM's
+  graph-capture/compilation warmup, which brought this down from ~5-6 min.
+  Modal memory snapshots were tried to cut this further, but did not restore the
+  vLLM subprocess reliably on CPU (the documented examples rely on the
+  GPU-only `--enable-sleep-mode`), so we keep one container warm instead.
 
 Usage:
   modal run app.py::download_model     # one-time: prefetch weights into the volume
@@ -50,9 +45,9 @@ VLLM_PORT = 8000
 MINUTES = 60
 
 # vLLM CPU build is published as a dedicated prebuilt image (no source compile).
-# Pin a concrete tag for reproducibility; bump deliberately.
+# Pinned to a concrete version for reproducibility; bump deliberately.
 # See: https://docs.vllm.ai/en/latest/getting_started/installation/cpu.html
-VLLM_CPU_IMAGE = "vllm/vllm-openai-cpu:latest-x86_64"
+VLLM_CPU_IMAGE = "vllm/vllm-openai-cpu:v0.23.0-x86_64"
 
 # --------------------------------------------------------------------------- #
 # Image
@@ -64,15 +59,13 @@ vllm_image = (
     .entrypoint([])
     .env(
         {
-            # KV cache space reserved for vLLM on CPU, in GiB. Qwen3-0.6B is tiny;
-            # keep this modest so the memory snapshot stays small/fast to restore.
+            # KV cache space reserved for vLLM on CPU, in GiB. Qwen3-0.6B is
+            # tiny, so a couple GiB holds plenty of concurrent sequences.
             "VLLM_CPU_KVCACHE_SPACE": "2",
             # Let vLLM bind OpenMP threads to the cores Modal gives us.
             "VLLM_CPU_OMP_THREADS_BIND": "auto",
             # Faster HF downloads.
             "HF_HUB_ENABLE_HF_TRANSFER": "1",
-            # Single-threaded inductor compile is friendlier to snapshotting.
-            "TORCHINDUCTOR_COMPILE_THREADS": "1",
         }
     )
 )
@@ -120,7 +113,7 @@ def _wait_ready(proc, timeout=15 * MINUTES):
 
 
 # --------------------------------------------------------------------------- #
-# The autoscaling, OpenAI-compatible inference server (snapshot-accelerated)
+# The autoscaling, OpenAI-compatible inference server
 # --------------------------------------------------------------------------- #
 @app.cls(
     image=vllm_image,

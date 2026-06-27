@@ -19,9 +19,9 @@ client ──HTTP──▶  Modal proxy / load balancer  ──▶  [ vLLM conta
   server (`vllm serve Qwen/Qwen3-0.6B`) as a subprocess inside `@modal.enter()`,
   exposed via [`@modal.web_server(port=8000)`](https://modal.com/docs/guide/webhooks#web-server).
   vLLM natively serves `/v1/chat/completions`, so the Modal URL *is* the OpenAI
-  base URL — no custom API layer needed. `--enforce-eager` skips vLLM's CUDA
-  graph compilation step, cutting cold-start time significantly (see
-  [vLLM engine arguments](https://docs.vllm.ai/en/latest/configuration/engine_args/)).
+  base URL — no custom API layer needed. `--enforce-eager` skips vLLM's
+  graph-capture/compilation warmup step, cutting cold-start time significantly
+  (see [vLLM engine arguments](https://docs.vllm.ai/en/latest/configuration/engine_args/)).
 - **Routing to model servers** is handled by Modal's built-in proxy/load
   balancer. I deliberately did not hand-roll a router: Modal already
   distributes requests across healthy containers and tracks per-container load.
@@ -101,8 +101,8 @@ worst-case requests that hit containers still initialising):
 
 | Metric | p50 | p99 |
 | ------ | --- | --- |
-| TTFT   | 1.5s | 97s |
-| E2E    | 31s  | 124s |
+| TTFT   | 1.5s | 94s |
+| E2E    | 31s  | 122s |
 
 The high p99 values are dominated by requests routed to containers during their
 1–2 min cold-start window. Once all 6 containers are warm, TTFT p50 settles

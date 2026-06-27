@@ -8,13 +8,13 @@ Locust's stats / CSV with full percentiles (incl. p99):
   - "TTFT"  : time to first streamed token
   - "E2E"   : end-to-end time until the stream completes
 
-A `LoadTestShape` drives a traffic profile of ramp-up -> sustain @ 40 -> scale
-to zero, so the autoscaler's scale-up and scale-down are both exercised.
+A `LoadTestShape` drives a traffic profile of ramp-up -> sustain @ 40 -> drop to
+0, so the autoscaler's scale-up and scale-down are both exercised.
 
 Run (headless), writing time-series + summary CSVs into ../results:
 
   locust -f loadtest/locustfile.py \
-      --host https://<workspace>--qwen3-cpu-inference-serve.modal.run \
+      --host https://<workspace>--qwen3-cpu-inference-vllmserver-serve.modal.run \
       --headless --csv results/locust --csv-full-history
 
 The shape class sets users/spawn-rate itself, so you don't pass -u/-r.
@@ -95,7 +95,7 @@ class QwenUser(HttpUser):
 
 
 class StagesShape(LoadTestShape):
-    """Ramp to 40 users, sustain, then drop to 0 to observe scale-to-zero.
+    """Ramp to 40 users, sustain, then drop load to 0 to observe scale-down.
 
     Each stage's `end` is a cumulative elapsed-time threshold (seconds).
     """
